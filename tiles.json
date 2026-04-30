@@ -1,0 +1,22 @@
+{
+  "Ile-de-France": {
+    "owner": "France",
+    "development": 5,
+    "population": 5,
+    "growth_progress": 0.045,
+    "terrain": "plain",
+    "precipitation": "base",
+    "region": "Basse Seine",
+    "notes": ""
+  },
+  "Normandy": {
+    "owner": "France",
+    "development": 3,
+    "population": 3,
+    "growth_progress": 0.0,
+    "terrain": "plain",
+    "precipitation": "base",
+    "region": "Basse Seine",
+    "notes": ""
+  }
+}
