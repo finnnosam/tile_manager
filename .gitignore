@@ -1,2 +1,6 @@
-#Ignore savegames
+#Many savegames, bad for uploading
 savegames/
+
+#Are constantly changed
+game_state.json
+regions.json
