@@ -9,6 +9,16 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+COLORS = [
+    "\033[91m",  # red
+    "\033[92m",  # green
+    "\033[93m",  # yellow
+    "\033[94m",  # blue
+    "\033[95m",  # magenta
+    "\033[96m",  # cyan
+]
+RESET = "\033[0m"
+
 REGIONS_FILE = Path("regions.json")
 STATE_FILE = Path("game_state.json")
 
@@ -165,8 +175,20 @@ def repl():
                 g.save()
 
             elif cmd == "list":
+                owners = {}
+
                 for t in g.regions.values():
-                    print(t)
+                    owners.setdefault(t.owner, []).append(t.name)
+
+                owner_colors = {}
+                for i, owner in enumerate(owners):
+                    owner_colors[owner] = COLORS[i % len(COLORS)]
+
+                for owner, regions in owners.items():
+                    print(f"{owner_colors[owner]}{owner}{RESET}")
+                    for name in regions:
+                        print(f"  {name}")
+                    print()
 
             elif cmd == "loadfrom":
                 import shutil, os
