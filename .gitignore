@@ -4,3 +4,4 @@ savegames/
 #Are constantly changed
 game_state.json
 regions.json
+adjacency.json

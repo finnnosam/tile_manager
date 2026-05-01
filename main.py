@@ -21,6 +21,7 @@ RESET = "\033[0m"
 
 REGIONS_FILE = Path("regions.json")
 STATE_FILE = Path("game_state.json")
+ADJ_FILE = Path("adjacency.json")
 
 """
 To add new types of info to a region:
@@ -30,36 +31,84 @@ add under 'elif cmd == "addregion":'
 """
 
 @dataclass
-class Region:
-    name: str
-    owner: str = "Unowned"
+class Tile:
+    id: str
     development: int = 0
     population: int = 0
     growth_progress: float = 0.0
-    terrain: str = "plain"
-    precipitation: str = "base"
-    temperature: str = "moderate"
-    notes: str = ""
+    terrain: str = "blank"
+    precipitation: str = "blank"
+    temperature: str = "blank"
 
     @classmethod
-    def from_dict(cls, name: str, data: Dict[str, Any]) -> "Region":
+    def from_dict(cls, tid: str, data: Dict[str, Any]) -> "Tile":
         return cls(
-            name=name,
-            owner=str(data.get("owner", "Unowned")),
+            id=tid,
             development=int(data.get("development", 0)),
             population=int(data.get("population", 0)),
             growth_progress=float(data.get("growth_progress", 0.0)),
-            terrain=str(data.get("terrain", "plain")),
-            precipitation=str(data.get("precipitation", "base")),
-            temperature=str(data.get("temperature", "moderate")),
-            notes=str(data.get("notes", "")),
+            terrain=str(data.get("terrain", "blank")),
+            precipitation=str(data.get("precipitation", "blank")),
+            temperature=str(data.get("temperature", "blank")),
         )
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
-        d.pop("name", None)
+        d.pop("id", None)
         return d
 
+@dataclass
+class Region:
+    name: str
+    owner: str = "Unowned"
+    notes: str = ""
+    tiles: Dict[str, Tile] = None
+
+    def __post_init__(self):
+        if self.tiles is None:
+            self.tiles = {}
+
+    @classmethod
+    def from_dict(cls, name: str, data: Dict[str, Any]) -> "Region":
+        tiles_raw = data.get("tiles", {})
+        tiles = {tid: Tile.from_dict(tid, tdata) for tid, tdata in tiles_raw.items()}
+
+        return cls(
+            name=name,
+            owner=str(data.get("owner", "Unowned")),
+            notes=str(data.get("notes", "")),
+            tiles=tiles,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "owner": self.owner,
+            "notes": self.notes,
+            "tiles": {tid: t.to_dict() for tid, t in self.tiles.items()},
+        }
+
+    def next_tile_id(self) -> str:
+        for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            if c not in self.tiles:
+                return c
+        raise ValueError("Max tiles reached (26)")
+
+@dataclass
+class Adjacency:
+    regionA: str
+    regionB: str
+    distance: int
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Adjacency":
+        return cls(
+            regionA=data["regionA"],
+            regionB=data["regionB"],
+            distance=int(data["distance"]),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 DEFAULT_STATE = {
     "turn": 1,
@@ -71,16 +120,24 @@ class GameManager:
     def __init__(self):
         self.regions: Dict[str, Region] = {}
         self.state: Dict[str, Any] = {}
+        self.adjacency: list[Adjacency] = []
 
     def load(self):
         self.state = self._load_json(STATE_FILE, DEFAULT_STATE)
         raw_regions = self._load_json(REGIONS_FILE, {})
         self.regions = {name: Region.from_dict(name, data) for name, data in raw_regions.items()}
 
+        raw_adj = self._load_json(ADJ_FILE, [])
+        self.adjacency = [Adjacency.from_dict(a) for a in raw_adj]
+
     def save(self):
         STATE_FILE.write_text(json.dumps(self.state, indent=2) + "\n")
+
         raw = {n: t.to_dict() for n, t in self.regions.items()}
         REGIONS_FILE.write_text(json.dumps(raw, indent=2) + "\n")
+
+        raw_adj = [a.to_dict() for a in self.adjacency]
+        ADJ_FILE.write_text(json.dumps(raw_adj, indent=2) + "\n")
 
     def _load_json(self, path, default):
         if not path.exists():
@@ -100,23 +157,49 @@ class GameManager:
             raise ValueError("Region exists")
         self.regions[name] = Region(**kwargs)
 
+    def add_tile(self, region_name: str, **kwargs):
+        region = self.require_region(region_name)
+        tid = region.next_tile_id()
+        region.tiles[tid] = Tile(id=tid, **kwargs)
+    
+    def add_adjacency(self, regionA: str, regionB: str, distance: int):
+        self.require_region(regionA)
+        self.require_region(regionB)
+
+        for a in self.adjacency:
+            if {a.regionA, a.regionB} == {regionA, regionB}:
+                raise ValueError("Adjacency already exists")
+
+        self.adjacency.append(Adjacency(regionA, regionB, distance))
+
+    def get_neighbors(self, region_name: str):
+        result = []
+
+        for a in self.adjacency:
+            if a.regionA == region_name:
+                result.append((a.regionB, a.distance))
+            elif a.regionB == region_name:
+                result.append((a.regionA, a.distance))
+
+        return result
+
     def change_owner(self, region_name: str, new_owner: str):
         self.require_region(region_name).owner = new_owner
 
-    def add_development(self, region_name: str, amt: int):
-        t = self.require_region(region_name)
-        t.development = max(0, t.development + amt)
+    def add_development(self, region_name: str, tile_id: str, amt: int):
+        tile = self.require_region(region_name).tiles[tile_id]
+        tile.development = max(0, tile.development + amt)
 
     def run_growth(self):
         rate = self.state.get("population_growth_rate", 0.25)
-        for t in self.regions.values():
-            # growth accumulates into progress
-            t.growth_progress += rate * (1 + t.development * 0.1)
 
-            # convert progress into population
-            while t.growth_progress >= 1.0:
-                t.population += 1
-                t.growth_progress -= 1.0
+        for region in self.regions.values():
+            for t in region.tiles.values():
+                t.growth_progress += rate * (1 + t.development * 0.1)
+
+                while t.growth_progress >= 1.0:
+                    t.population += 1
+                    t.growth_progress -= 1.0
 
     def advance_turn(self):
         self.state["turn"] += 1
@@ -143,24 +226,35 @@ def repl():
 
         try:
             if cmd == "help":
-                print("addregion, owner, devadd, growth, turn, list, quit, saveas")
+                print("addregion, owner, adj, devadd, growth, turn, list, quit, saveas")
 
             elif cmd == "addregion":
                 name = input("Name: ")
                 owner = input("Owner: ") or "Unowned"
-                dev = int(input("Development: ") or 0)
-                pop = int(input("Population: ") or 0)
-                terrain = input("Terrain: ") or "plain"
-                precipitation = input("precipitation: ") or "base"
-                temperature = input("temperature: ") or "moderate"
 
-                g.add_region(name=name, owner=owner, development=dev,
-                           population=pop, terrain=terrain, precipitation=precipitation, temperature=temperature)
+                g.add_region(name=name, owner=owner)
+
+                # create first tile
+                g.add_tile(name)
+
                 g.save()
 
             elif cmd == "owner":
                 g.change_owner(args[0], args[1])
                 g.save()
+
+            elif cmd == "adj":
+                regA = input("RegionA: ")
+                regB = input("RegionB: ")
+                #dist = input("Distance int: ")
+                dist = 1
+
+                g.add_adjacency(regA, regB, int(dist))
+                g.save()
+            
+            elif cmd == "neighbors":
+                for name, dist in g.get_neighbors(args[0]):
+                    print(f"{name} (dist {dist})")
 
             elif cmd == "devadd":
                 g.add_development(args[0], int(args[1]))
