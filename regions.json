@@ -6,7 +6,7 @@
     "growth_progress": 0.045,
     "terrain": "plain",
     "precipitation": "base",
-    "region": "Basse Seine",
+    "temperature": "moderate",
     "notes": ""
   },
   "Normandy": {
@@ -16,7 +16,7 @@
     "growth_progress": 0.0,
     "terrain": "plain",
     "precipitation": "base",
-    "region": "Basse Seine",
+    "temperature": "moderate",
     "notes": ""
   }
 }

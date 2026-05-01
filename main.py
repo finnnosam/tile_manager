@@ -9,18 +9,18 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-TILES_FILE = Path("tiles.json")
+REGIONS_FILE = Path("regions.json")
 STATE_FILE = Path("game_state.json")
 
 """
-To add new types of info to a tile:
-add under 'class Tile:'
+To add new types of info to a region:
+add under 'class Region:'
 add under 'from_dict'
-add under 'elif cmd == "addtile":'
+add under 'elif cmd == "addregion":'
 """
 
 @dataclass
-class Tile:
+class Region:
     name: str
     owner: str = "Unowned"
     development: int = 0
@@ -28,11 +28,11 @@ class Tile:
     growth_progress: float = 0.0
     terrain: str = "plain"
     precipitation: str = "base"
-    region: str = ""
+    temperature: str = "moderate"
     notes: str = ""
 
     @classmethod
-    def from_dict(cls, name: str, data: Dict[str, Any]) -> "Tile":
+    def from_dict(cls, name: str, data: Dict[str, Any]) -> "Region":
         return cls(
             name=name,
             owner=str(data.get("owner", "Unowned")),
@@ -41,7 +41,7 @@ class Tile:
             growth_progress=float(data.get("growth_progress", 0.0)),
             terrain=str(data.get("terrain", "plain")),
             precipitation=str(data.get("precipitation", "base")),
-            region=str(data.get("region", "")),
+            temperature=str(data.get("temperature", "moderate")),
             notes=str(data.get("notes", "")),
         )
 
@@ -59,52 +59,47 @@ DEFAULT_STATE = {
 
 class GameManager:
     def __init__(self):
-        self.tiles: Dict[str, Tile] = {}
+        self.regions: Dict[str, Region] = {}
         self.state: Dict[str, Any] = {}
 
     def load(self):
         self.state = self._load_json(STATE_FILE, DEFAULT_STATE)
-        raw_tiles = self._load_json(TILES_FILE, {})
-        self.tiles = {name: Tile.from_dict(name, data) for name, data in raw_tiles.items()}
+        raw_regions = self._load_json(REGIONS_FILE, {})
+        self.regions = {name: Region.from_dict(name, data) for name, data in raw_regions.items()}
 
     def save(self):
         STATE_FILE.write_text(json.dumps(self.state, indent=2) + "\n")
-        raw = {n: t.to_dict() for n, t in self.tiles.items()}
-        TILES_FILE.write_text(json.dumps(raw, indent=2) + "\n")
+        raw = {n: t.to_dict() for n, t in self.regions.items()}
+        REGIONS_FILE.write_text(json.dumps(raw, indent=2) + "\n")
 
     def _load_json(self, path, default):
         if not path.exists():
             return default.copy()
         return json.loads(path.read_text())
 
-    def require_tile(self, name: str) -> Tile:
-        if name not in self.tiles:
-            raise KeyError(f"Tile '{name}' not found")
-        return self.tiles[name]
+    def require_region(self, name: str) -> Region:
+        if name not in self.regions:
+            raise KeyError(f"Region '{name}' not found")
+        return self.regions[name]
 
-    # --- Tile actions ---
+    # --- Regions actions ---
 
-    def add_tile(self, **kwargs):
+    def add_region(self, **kwargs):
         name = kwargs["name"]
-        if name in self.tiles:
-            raise ValueError("Tile exists")
-        self.tiles[name] = Tile(**kwargs)
+        if name in self.regions:
+            raise ValueError("Region exists")
+        self.regions[name] = Region(**kwargs)
 
-    def change_owner(self, tile_name: str, new_owner: str):
-        self.require_tile(tile_name).owner = new_owner
+    def change_owner(self, region_name: str, new_owner: str):
+        self.require_region(region_name).owner = new_owner
 
-    def change_owner_region(self, region: str, new_owner: str):
-        for t in self.tiles.values():
-            if t.region == region:
-                t.owner = new_owner
-
-    def add_development(self, tile_name: str, amt: int):
-        t = self.require_tile(tile_name)
+    def add_development(self, region_name: str, amt: int):
+        t = self.require_region(region_name)
         t.development = max(0, t.development + amt)
 
     def run_growth(self):
         rate = self.state.get("population_growth_rate", 0.25)
-        for t in self.tiles.values():
+        for t in self.regions.values():
             # growth accumulates into progress
             t.growth_progress += rate * (1 + t.development * 0.1)
 
@@ -138,27 +133,23 @@ def repl():
 
         try:
             if cmd == "help":
-                print("addtile, owner, owner_region, devadd, growth, turn, list, quit, saveas")
+                print("addregion, owner, devadd, growth, turn, list, quit, saveas")
 
-            elif cmd == "addtile":
+            elif cmd == "addregion":
                 name = input("Name: ")
                 owner = input("Owner: ") or "Unowned"
                 dev = int(input("Development: ") or 0)
                 pop = int(input("Population: ") or 0)
-                region = input("Region: ")
                 terrain = input("Terrain: ") or "plain"
                 precipitation = input("precipitation: ") or "base"
+                temperature = input("temperature: ") or "moderate"
 
-                g.add_tile(name=name, owner=owner, development=dev,
-                           population=pop, region=region, terrain=terrain, precipitation=precipitation)
+                g.add_region(name=name, owner=owner, development=dev,
+                           population=pop, terrain=terrain, precipitation=precipitation, temperature=temperature)
                 g.save()
 
             elif cmd == "owner":
                 g.change_owner(args[0], args[1])
-                g.save()
-
-            elif cmd == "owner_region":
-                g.change_owner_region(args[0], args[1])
                 g.save()
 
             elif cmd == "devadd":
@@ -174,7 +165,7 @@ def repl():
                 g.save()
 
             elif cmd == "list":
-                for t in g.tiles.values():
+                for t in g.regions.values():
                     print(t)
 
             elif cmd == "loadfrom":
@@ -184,13 +175,13 @@ def repl():
                 else:
                     base = "savegames"
                     folder = os.path.join(base, args[0])
-                    tiles_path = os.path.join(folder, "tiles.json")
+                    regions_path = os.path.join(folder, "regions.json")
                     state_path = os.path.join(folder, "game_state.json")
 
-                    if not os.path.exists(tiles_path) or not os.path.exists(state_path):
+                    if not os.path.exists(regions_path) or not os.path.exists(state_path):
                         print("Error: folder does not contain required save files.")
                     else:
-                        shutil.copy(tiles_path, TILES_FILE)
+                        shutil.copy(regions_path, REGIONS_FILE)
                         shutil.copy(state_path, STATE_FILE)
                         g.load()
                         print(f"Loaded save from '{folder}'")
@@ -205,7 +196,7 @@ def repl():
                     folder = os.path.join(base, args[0])
                     os.makedirs(folder, exist_ok=True)
                     g.save()
-                    shutil.copy(TILES_FILE, os.path.join(folder, "tiles.json"))
+                    shutil.copy(REGIONS_FILE, os.path.join(folder, "regions.json"))
                     shutil.copy(STATE_FILE, os.path.join(folder, "game_state.json"))
                     print(f"Backup saved to '{folder}'")
 
