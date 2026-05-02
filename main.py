@@ -1,4 +1,5 @@
 """Board game / RP tile manager (extended)
+Refactored: terrain, precipitation, temperature moved from Tile -> Region
 """
 
 from __future__ import annotations
@@ -7,7 +8,7 @@ import json
 import shlex
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 COLORS = [
     "\033[91m",  # red
@@ -23,22 +24,12 @@ REGIONS_FILE = Path("regions.json")
 STATE_FILE = Path("game_state.json")
 ADJ_FILE = Path("adjacency.json")
 
-"""
-To add new types of info to a region:
-add under 'class Region:'
-add under 'from_dict'
-add under 'elif cmd == "addregion":'
-"""
-
 @dataclass
 class Tile:
     id: str
     development: int = 0
     population: int = 0
     growth_progress: float = 0.0
-    terrain: str = "blank"
-    precipitation: str = "blank"
-    temperature: str = "blank"
 
     @classmethod
     def from_dict(cls, tid: str, data: Dict[str, Any]) -> "Tile":
@@ -47,9 +38,6 @@ class Tile:
             development=int(data.get("development", 0)),
             population=int(data.get("population", 0)),
             growth_progress=float(data.get("growth_progress", 0.0)),
-            terrain=str(data.get("terrain", "blank")),
-            precipitation=str(data.get("precipitation", "blank")),
-            temperature=str(data.get("temperature", "blank")),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -62,6 +50,9 @@ class Region:
     name: str
     owner: str = "Unowned"
     notes: str = ""
+    terrain: str = "blank"
+    precipitation: str = "blank"
+    temperature: str = "blank"
     tiles: Dict[str, Tile] = None
 
     def __post_init__(self):
@@ -77,6 +68,9 @@ class Region:
             name=name,
             owner=str(data.get("owner", "Unowned")),
             notes=str(data.get("notes", "")),
+            terrain=str(data.get("terrain", "blank")),
+            precipitation=str(data.get("precipitation", "blank")),
+            temperature=str(data.get("temperature", "blank")),
             tiles=tiles,
         )
 
@@ -84,6 +78,9 @@ class Region:
         return {
             "owner": self.owner,
             "notes": self.notes,
+            "terrain": self.terrain,
+            "precipitation": self.precipitation,
+            "temperature": self.temperature,
             "tiles": {tid: t.to_dict() for tid, t in self.tiles.items()},
         }
 
@@ -149,8 +146,6 @@ class GameManager:
             raise KeyError(f"Region '{name}' not found")
         return self.regions[name]
 
-    # --- Regions actions ---
-
     def add_region(self, **kwargs):
         name = kwargs["name"]
         if name in self.regions:
@@ -161,7 +156,7 @@ class GameManager:
         region = self.require_region(region_name)
         tid = region.next_tile_id()
         region.tiles[tid] = Tile(id=tid, **kwargs)
-    
+
     def add_adjacency(self, regionA: str, regionB: str, distance: int):
         self.require_region(regionA)
         self.require_region(regionB)
@@ -205,8 +200,6 @@ class GameManager:
         self.state["turn"] += 1
 
 
-# --- CLI ---
-
 def parse(raw):
     try:
         parts = shlex.split(raw)
@@ -226,17 +219,24 @@ def repl():
 
         try:
             if cmd == "help":
-                print("addregion, owner, adj, devadd, growth, turn, list, quit, saveas")
+                print("addregion, owner, adj, neighbors, devadd, growth, turn, list, quit, saveas")
 
             elif cmd == "addregion":
                 name = input("Name: ")
                 owner = input("Owner: ") or "Unowned"
+                terrain = input("Terrain: ") or "blank"
+                precipitation = input("Precipitation: ") or "blank"
+                temperature = input("Temperature: ") or "blank"
 
-                g.add_region(name=name, owner=owner)
+                g.add_region(
+                    name=name,
+                    owner=owner,
+                    terrain=terrain,
+                    precipitation=precipitation,
+                    temperature=temperature,
+                )
 
-                # create first tile
                 g.add_tile(name)
-
                 g.save()
 
             elif cmd == "owner":
@@ -246,18 +246,17 @@ def repl():
             elif cmd == "adj":
                 regA = input("RegionA: ")
                 regB = input("RegionB: ")
-                #dist = input("Distance int: ")
                 dist = 1
 
                 g.add_adjacency(regA, regB, int(dist))
                 g.save()
-            
+
             elif cmd == "neighbors":
                 for name, dist in g.get_neighbors(args[0]):
                     print(f"{name} (dist {dist})")
 
             elif cmd == "devadd":
-                g.add_development(args[0], int(args[1]))
+                g.add_development(args[0], args[1], int(args[2]))
                 g.save()
 
             elif cmd == "growth":
@@ -283,38 +282,6 @@ def repl():
                     for name in regions:
                         print(f"  {name}")
                     print()
-
-            elif cmd == "loadfrom":
-                import shutil, os
-                if len(args) < 1:
-                    print("Usage: loadfrom <folder_name>")
-                else:
-                    base = "savegames"
-                    folder = os.path.join(base, args[0])
-                    regions_path = os.path.join(folder, "regions.json")
-                    state_path = os.path.join(folder, "game_state.json")
-
-                    if not os.path.exists(regions_path) or not os.path.exists(state_path):
-                        print("Error: folder does not contain required save files.")
-                    else:
-                        shutil.copy(regions_path, REGIONS_FILE)
-                        shutil.copy(state_path, STATE_FILE)
-                        g.load()
-                        print(f"Loaded save from '{folder}'")
-
-            elif cmd == "saveas":
-                import shutil, os
-                if len(args) < 1:
-                    print("Usage: saveas <folder_name>")
-                else:
-                    base = "savegames"
-                    os.makedirs(base, exist_ok=True)
-                    folder = os.path.join(base, args[0])
-                    os.makedirs(folder, exist_ok=True)
-                    g.save()
-                    shutil.copy(REGIONS_FILE, os.path.join(folder, "regions.json"))
-                    shutil.copy(STATE_FILE, os.path.join(folder, "game_state.json"))
-                    print(f"Backup saved to '{folder}'")
 
             elif cmd == "quit":
                 g.save()
