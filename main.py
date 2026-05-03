@@ -223,18 +223,26 @@ def repl():
 
             elif cmd == "addregion":
                 name = input("Name: ")
-                owner = input("Owner: ") or "Unowned"
                 terrain = input("Terrain: ") or "blank"
-                precipitation = input("Precipitation: ") or "blank"
-                temperature = input("Temperature: ") or "blank"
 
-                g.add_region(
-                    name=name,
-                    owner=owner,
-                    terrain=terrain,
-                    precipitation=precipitation,
-                    temperature=temperature,
-                )
+                if terrain.lower() == "ocean":
+                    # Ocean regions keep defaults for other fields
+                    g.add_region(
+                        name=name,
+                        terrain=terrain,
+                    )
+                else:
+                    owner = input("Owner: ") or "Unowned"
+                    precipitation = input("Precipitation: ") or "blank"
+                    temperature = input("Temperature: ") or "blank"
+
+                    g.add_region(
+                        name=name,
+                        owner=owner,
+                        terrain=terrain,
+                        precipitation=precipitation,
+                        temperature=temperature,
+                    )
 
                 g.add_tile(name)
                 g.save()
@@ -252,8 +260,26 @@ def repl():
                 g.save()
 
             elif cmd == "neighbors":
-                for name, dist in g.get_neighbors(args[0]):
-                    print(f"{name} (dist {dist})")
+                region_name = input("Region: ")
+
+                for name, dist in g.get_neighbors(region_name):
+                    region = g.require_region(name)
+
+                    # --- Color region name based on terrain ---
+                    if region.terrain.lower() == "ocean":
+                        name_color = "\033[94m"  # blue
+                    else:
+                        name_color = "\033[92m"
+
+                    # --- Color distance based on value ---
+                    if dist == 1:
+                        dist_color = "\033[97m"  # white
+                    elif dist == 2:
+                        dist_color = "\033[93m"  # yellow
+                    else:
+                        dist_color = "\033[91m"  # red
+
+                    print(f"{name_color}{name}{RESET} (dist {dist_color}{dist}{RESET})")
 
             elif cmd == "devadd":
                 g.add_development(args[0], args[1], int(args[2]))
