@@ -219,9 +219,10 @@ def repl():
 
         try:
             if cmd == "help":
-                print("addregion, owner, adj, neighbors, devadd, growth, turn, list, quit, saveas")
+                print("formatting usually looks like: add_, change = chg_")
+                print("addreg, owner, addadj, adj, adddev, growth, turn, list, quit, saveas")
 
-            elif cmd == "addregion":
+            elif cmd == "addreg":
                 name = input("Name: ")
                 terrain = input("Terrain: ") or "blank"
 
@@ -251,7 +252,7 @@ def repl():
                 g.change_owner(args[0], args[1])
                 g.save()
 
-            elif cmd == "adj":
+            elif cmd == "addadj":
                 regA = input("RegionA: ")
                 regB = input("RegionB: ")
                 dist = 1
@@ -259,7 +260,7 @@ def repl():
                 g.add_adjacency(regA, regB, int(dist))
                 g.save()
 
-            elif cmd == "neighbors":
+            elif cmd == "adj":
                 region_name = input("Region: ")
 
                 for name, dist in g.get_neighbors(region_name):
@@ -281,7 +282,7 @@ def repl():
 
                     print(f"{name_color}{name}{RESET} (dist {dist_color}{dist}{RESET})")
 
-            elif cmd == "devadd":
+            elif cmd == "adddev":
                 g.add_development(args[0], args[1], int(args[2]))
                 g.save()
 
@@ -308,6 +309,38 @@ def repl():
                     for name in regions:
                         print(f"  {name}")
                     print()
+
+            elif cmd == "loadfrom":
+                import shutil, os
+
+                savename = input("Save name: ")
+
+                base = "savegames"
+                folder = os.path.join(base, savename)
+                regions_path = os.path.join(folder, "regions.json")
+                state_path = os.path.join(folder, "game_state.json")
+
+                if not os.path.exists(regions_path) or not os.path.exists(state_path):
+                    print("Error: folder does not contain required save files.")
+                else:
+                    shutil.copy(regions_path, REGIONS_FILE)
+                    shutil.copy(state_path, STATE_FILE)
+                    g.load()
+                    print(f"Loaded save from '{folder}'")
+
+            elif cmd == "saveas":
+                import shutil, os
+
+                savename = input("Save name: ")
+                
+                base = "savegames"
+                os.makedirs(base, exist_ok=True)
+                folder = os.path.join(base, savename)
+                os.makedirs(folder, exist_ok=True)
+                g.save()
+                shutil.copy(REGIONS_FILE, os.path.join(folder, "regions.json"))
+                shutil.copy(STATE_FILE, os.path.join(folder, "game_state.json"))
+                print(f"Backup saved to '{folder}'")
 
             elif cmd == "quit":
                 g.save()
