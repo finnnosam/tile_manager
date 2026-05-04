@@ -319,12 +319,14 @@ def repl():
                 folder = os.path.join(base, savename)
                 regions_path = os.path.join(folder, "regions.json")
                 state_path = os.path.join(folder, "game_state.json")
+                adj_path = os.path.join(folder, "adjacency.json")
 
                 if not os.path.exists(regions_path) or not os.path.exists(state_path):
                     print("Error: folder does not contain required save files.")
                 else:
                     shutil.copy(regions_path, REGIONS_FILE)
                     shutil.copy(state_path, STATE_FILE)
+                    shutil.copy(adj_path, ADJ_FILE)
                     g.load()
                     print(f"Loaded save from '{folder}'")
 
@@ -332,7 +334,7 @@ def repl():
                 import shutil, os
 
                 savename = input("Save name: ")
-                
+
                 base = "savegames"
                 os.makedirs(base, exist_ok=True)
                 folder = os.path.join(base, savename)
@@ -340,6 +342,7 @@ def repl():
                 g.save()
                 shutil.copy(REGIONS_FILE, os.path.join(folder, "regions.json"))
                 shutil.copy(STATE_FILE, os.path.join(folder, "game_state.json"))
+                shutil.copy(ADJ_FILE, os.path.join(folder, "adjacency.json"))
                 print(f"Backup saved to '{folder}'")
 
             elif cmd == "quit":
